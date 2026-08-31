@@ -1,0 +1,378 @@
+﻿<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceBridge - Real-Time Multilingual Group Translator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        }
+                    },
+                    animation: {
+                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'wave': 'wave 1.2s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        wave: {
+                            '0%, 100%': { transform: 'scaleY(0.3)' },
+                            '50%': { transform: 'scaleY(1.0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for modern icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom scrollbars and glass effects */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.5);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.8);
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .speaking-glow {
+            box-shadow: 0 0 20px 4px rgba(99, 102, 241, 0.6);
+        }
+        .audio-bar {
+            width: 4px;
+            height: 24px;
+            background-color: #6366f1;
+            border-radius: 9999px;
+            margin: 0 2px;
+            animation: wave 1s ease-in-out infinite;
+        }
+        .audio-bar:nth-child(2) { animation-delay: 0.15s; }
+        .audio-bar:nth-child(3) { animation-delay: 0.3s; }
+        .audio-bar:nth-child(4) { animation-delay: 0.45s; }
+        .audio-bar:nth-child(5) { animation-delay: 0.2s; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="glass-panel sticky top-0 z-40 px-4 py-3 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                    <i class="fa-solid fa-language text-xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+                        VoiceBridge <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Live Multi-Lang</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Speak in your tongue &bull; Hear in theirs</p>
+                </div>
+            </div>
+
+            <!-- Room info / Active Status -->
+            <div id="header-room-info" class="hidden flex items-center space-x-3">
+                <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span class="text-xs text-slate-400 font-mono">ROOM:</span>
+                    <span id="display-room-id" class="text-sm font-bold text-indigo-400 font-mono">---</span>
+                    <button id="btn-copy-room" title="Copy Invite Link" class="text-slate-400 hover:text-white transition-colors ml-1">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+
+                <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span id="user-language-badge" class="text-sm flex items-center gap-1.5 font-medium">
+                        <span>🌐</span> <span>English</span>
+                    </span>
+                </div>
+
+                <button id="btn-open-settings" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+
+                <button id="btn-leave-room" class="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 text-sm font-medium border border-rose-500/30 transition">
+                    <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Leave
+                </button>
+            </div>
+
+            <!-- Global Connection Indicator -->
+            <div id="connection-status" class="flex items-center space-x-2 text-xs text-emerald-400">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="connection-text">Ready</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-1 flex flex-col max-w-7xl w-full mx-auto p-4 md:p-6 overflow-hidden">
+
+        <!-- ==================== SCREEN 1: LOBBY / JOIN FORM ==================== -->
+        <div id="lobby-screen" class="flex-1 flex items-center justify-center py-6">
+            <div class="glass-panel w-full max-w-md p-6 sm:p-8 rounded-2xl shadow-2xl border border-slate-800 relative overflow-hidden">
+                <div class="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-violet-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div class="text-center mb-6">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 text-3xl mb-3 shadow-inner">
+                        <i class="fa-solid fa-headset"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">Join Translator Room</h2>
+                    <p class="text-sm text-slate-400 mt-1">Connect with teammates across 40+ languages seamlessly</p>
+                </div>
+
+                <form id="join-form" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Your Name</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500"><i class="fa-solid fa-user"></i></span>
+                            <input type="text" id="input-name" required placeholder="e.g. Alex" 
+                                class="w-full pl-10 pr-4 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-white placeholder-slate-500 outline-none transition">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Your Native / Preferred Language</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500"><i class="fa-solid fa-earth-americas"></i></span>
+                            <select id="select-language" class="w-full pl-10 pr-4 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-white outline-none transition appearance-none cursor-pointer">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <span class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-500"><i class="fa-solid fa-chevron-down text-xs"></i></span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                            <i class="fa-solid fa-circle-info text-indigo-400"></i>
+                            You will speak &amp; hear in this language.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Room Code / Name</label>
+                        <div class="flex space-x-2">
+                            <div class="relative flex-1">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500"><i class="fa-solid fa-hashtag"></i></span>
+                                <input type="text" id="input-room" required placeholder="team-sync" 
+                                    class="w-full pl-10 pr-4 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-white placeholder-slate-500 outline-none font-mono transition">
+                            </div>
+                            <button type="button" id="btn-generate-room" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition" title="Generate Random Room">
+                                <i class="fa-solid fa-shuffle"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="pt-2">
+                        <button type="submit" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition-all transform active:scale-[0.98] flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-door-open"></i>
+                            <span>Enter Conference Room</span>
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Features list -->
+                <div class="mt-6 pt-5 border-t border-slate-800 grid grid-cols-3 gap-2 text-center text-xs text-slate-400">
+                    <div class="flex flex-col items-center">
+                        <i class="fa-solid fa-bolt text-indigo-400 mb-1 text-sm"></i>
+                        <span>Zero-Lag Live</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <i class="fa-solid fa-volume-high text-violet-400 mb-1 text-sm"></i>
+                        <span>Auto-Voice TTS</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <i class="fa-solid fa-users text-indigo-400 mb-1 text-sm"></i>
+                        <span>5+ Multi-Party</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SCREEN 2: ACTIVE CONFERENCE ROOM ==================== -->
+        <div id="room-screen" class="hidden flex-1 flex flex-col space-y-4 overflow-hidden">
+            
+            <!-- TOP PARTICIPANTS STRIP -->
+            <div class="glass-panel p-3 rounded-2xl">
+                <div class="flex items-center justify-between mb-2 px-1">
+                    <div class="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                        <i class="fa-solid fa-users text-indigo-400"></i>
+                        <span>Connected Members (<span id="participant-count">1</span>)</span>
+                    </div>
+                    <div class="text-xs text-slate-400 flex items-center gap-1">
+                        <i class="fa-solid fa-circle text-[8px] text-emerald-400"></i>
+                        <span>Each speaks &amp; receives in their chosen tongue</span>
+                    </div>
+                </div>
+                
+                <!-- Horizontal scrollable participant list -->
+                <div id="participants-container" class="flex items-center space-x-3 overflow-x-auto pb-1">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- LIVE TRANSCRIPTION & TRANSLATION FEED -->
+            <div class="flex-1 glass-panel rounded-2xl flex flex-col overflow-hidden relative border border-slate-800">
+                
+                <!-- Active Speaker Notification Banner -->
+                <div id="active-speaker-banner" class="hidden bg-gradient-to-r from-indigo-900/60 via-indigo-600/30 to-slate-900/60 border-b border-indigo-500/30 px-4 py-2 flex items-center justify-between transition-all duration-300">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex items-center h-4">
+                            <div class="audio-bar"></div>
+                            <div class="audio-bar"></div>
+                            <div class="audio-bar"></div>
+                            <div class="audio-bar"></div>
+                            <div class="audio-bar"></div>
+                        </div>
+                        <span id="active-speaker-text" class="text-xs font-semibold text-indigo-200">Alice is speaking...</span>
+                    </div>
+                    <span class="text-[10px] text-indigo-300 font-mono">LIVE RECOGNITION</span>
+                </div>
+
+                <!-- Feed message scroll area -->
+                <div id="messages-feed" class="flex-1 p-4 md:p-6 overflow-y-auto space-y-4">
+                    <!-- Welcome / Instruction card -->
+                    <div class="text-center py-8 px-4 text-slate-400">
+                        <div class="w-14 h-14 mx-auto rounded-full bg-slate-800/80 border border-slate-700 flex items-center justify-center text-indigo-400 text-2xl mb-3">
+                            <i class="fa-solid fa-microphone-lines"></i>
+                        </div>
+                        <h3 class="text-base font-semibold text-slate-200">The Room is Ready!</h3>
+                        <p class="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                            Click the microphone button below to speak in your language. Everyone else will immediately hear and see your words translated into their native language.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Live Interim / Pending Speech Preview -->
+                <div id="interim-speech-box" class="hidden px-4 py-2 bg-indigo-950/40 border-t border-indigo-900/50 flex items-center space-x-3 text-xs text-indigo-300">
+                    <i class="fa-solid fa-wave-square animate-pulse text-indigo-400"></i>
+                    <span class="font-semibold text-slate-400">Speaking:</span>
+                    <span id="interim-transcript" class="italic text-indigo-200">...</span>
+                </div>
+            </div>
+
+            <!-- BOTTOM CONTROL DOCK -->
+            <div class="glass-panel p-3 md:p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row items-center gap-3 justify-between shadow-2xl">
+                
+                <!-- Left: Quick Audio & Auto-TTS toggles -->
+                <div class="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-start">
+                    <label class="flex items-center space-x-2 cursor-pointer bg-slate-800/80 hover:bg-slate-700/80 px-3 py-2 rounded-xl border border-slate-700 text-xs text-slate-300 transition select-none">
+                        <input type="checkbox" id="toggle-autotts" checked class="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-700 rounded focus:ring-indigo-500 cursor-pointer">
+                        <span class="font-medium"><i class="fa-solid fa-volume-high text-indigo-400 mr-1"></i> Auto-Speak</span>
+                    </label>
+
+                    <button id="btn-test-tts" class="bg-slate-800/80 hover:bg-slate-700/80 px-3 py-2 rounded-xl border border-slate-700 text-xs text-slate-300 transition font-medium flex items-center space-x-1">
+                        <i class="fa-solid fa-circle-play text-violet-400"></i>
+                        <span>Test Voice</span>
+                    </button>
+                </div>
+
+                <!-- Center: Big Microphone Action Controls -->
+                <div class="flex items-center space-x-3">
+                    <!-- Live Continuous Mic Toggle -->
+                    <button id="btn-toggle-mic" class="relative group px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-lg shadow-indigo-600/30 transition-all transform active:scale-95 flex items-center space-x-2 text-sm">
+                        <span id="mic-indicator-dot" class="w-2.5 h-2.5 rounded-full bg-white opacity-80"></span>
+                        <i id="mic-icon" class="fa-solid fa-microphone text-base"></i>
+                        <span id="mic-btn-label">Start Speaking</span>
+                    </button>
+
+                    <!-- Push to talk button -->
+                    <button id="btn-ptt" title="Hold down to speak, release to send" class="hidden md:flex items-center space-x-1.5 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl border border-slate-700 text-xs font-semibold transition active:bg-indigo-700 active:text-white select-none">
+                        <i class="fa-solid fa-hand"></i>
+                        <span>Hold PTT</span>
+                    </button>
+                </div>
+
+                <!-- Right: Text Fallback Input -->
+                <form id="text-chat-form" class="flex items-center space-x-2 w-full md:w-80">
+                    <input type="text" id="input-chat-text" placeholder="Or type message here..." 
+                        class="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-xs text-white placeholder-slate-500 outline-none">
+                    <button type="submit" class="p-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition flex-shrink-0">
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ==================== SETTINGS MODAL ==================== -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+        <div class="glass-panel w-full max-w-md p-6 rounded-2xl shadow-2xl border border-slate-800 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-indigo-400"></i>
+                    Translator Settings
+                </h3>
+                <button id="btn-close-settings" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <!-- Language change -->
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">Switch Native Language</label>
+                    <select id="modal-select-language" class="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white outline-none">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+
+                <!-- Voice Selection -->
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">Audio Speech Voice</label>
+                    <select id="select-voice" class="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white outline-none">
+                        <option value="">Default System Voice</option>
+                    </select>
+                </div>
+
+                <!-- Speech Rate -->
+                <div>
+                    <div class="flex justify-between font-semibold text-slate-300 mb-1">
+                        <span>Speech Speed (<span id="rate-val">1.0x</span>)</span>
+                    </div>
+                    <input type="range" id="slider-rate" min="0.5" max="1.5" step="0.1" value="1.0" class="w-full accent-indigo-500">
+                </div>
+
+                <!-- Speech Pitch -->
+                <div>
+                    <div class="flex justify-between font-semibold text-slate-300 mb-1">
+                        <span>Voice Pitch (<span id="pitch-val">1.0</span>)</span>
+                    </div>
+                    <input type="range" id="slider-pitch" min="0.5" max="1.5" step="0.1" value="1.0" class="w-full accent-indigo-500">
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800 flex justify-end">
+                <button id="btn-save-settings" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs transition">
+                    Save &amp; Apply
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
