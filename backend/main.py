@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import logging
 from typing import Optional
@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from backend.translator import SUPPORTED_LANGUAGES, translate_text
+from backend.translator import SUPPORTED_LANGUAGES, translate_text, clear_translation_cache
 from backend.rooms import RoomManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -57,6 +57,12 @@ async def api_translate(req: TranslationRequest):
         "translated": translated
     }
 
+@app.post("/api/clear-cache")
+async def api_clear_cache():
+    """Clear cached translations to flush any stale or bad entries."""
+    clear_translation_cache()
+    return {"status": "success", "message": "Translation cache cleared"}
+
 @app.get("/api/rooms/{room_id}")
 async def get_room_details(room_id: str):
     """Get current participants in a room."""
@@ -99,8 +105,9 @@ async def websocket_endpoint(
             if action == "speech" or action == "text_message":
                 text = data.get("text", "").strip()
                 src_lang = data.get("source_lang", participant.language)
+                target_lang = data.get("target_lang")
                 if text:
-                    await room_manager.handle_speech_broadcast(room_id, user_id, text, src_lang)
+                    await room_manager.handle_speech_broadcast(room_id, user_id, text, src_lang, target_lang)
 
             elif action == "speaking_state":
                 is_speaking = bool(data.get("is_speaking", False))

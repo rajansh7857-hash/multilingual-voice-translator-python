@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 import html
 from typing import Dict, Set, Optional
@@ -114,48 +114,88 @@ SUPPORTED_LANGUAGES = {
     "su": {"name": "Sundanese (Basa Sunda)", "locale": "su-ID", "flag": "🇮🇩", "category": "Global Languages", "tts_fallback": "id-ID"}
 }
 
-# Reusable HTTP session
+# Language code overrides for Google Translate engine compatibility
+LANGUAGE_API_CODE_MAP: Dict[str, str] = {
+    "brx": "as",    # Bodo -> Assamese regional fallback
+    "ks": "ur",     # Kashmiri -> Urdu script fallback
+    "kok": "gom",   # Konkani -> Goan Konkani ISO code
+    "mni": "mni-Mtei",
+}
+
+# Reusable HTTP session with modern browser user-agent and connection pool
 _session = requests.Session()
 _session.headers.update({
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
 })
 
 # In-memory translation cache: (text, src, tgt) -> translated text
 _CACHE: Dict[tuple, str] = {}
 
+def clear_translation_cache():
+    """Clear in-memory translation cache."""
+    _CACHE.clear()
+
 def _sync_translate(text: str, source_lang: str, target_lang: str) -> str:
-    """Synchronous translation with caching."""
+    """Synchronous translation with robust Google Client API and caching."""
     if not text or not text.strip():
         return ""
     if source_lang == target_lang:
         return text
-        
-    cache_key = (text.strip(), source_lang, target_lang)
+
+    clean_text = text.strip()
+    cache_key = (clean_text, source_lang, target_lang)
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-        
+
+    sl = LANGUAGE_API_CODE_MAP.get(source_lang, source_lang)
+    tl = LANGUAGE_API_CODE_MAP.get(target_lang, target_lang)
+
+    # Try Google Translate client API variants (dict-chrome-ex, then gtx)
+    for client_param in ("dict-chrome-ex", "gtx"):
+        try:
+            url = "https://translate.googleapis.com/translate_a/single"
+            params = {
+                "client": client_param,
+                "sl": sl,
+                "tl": tl,
+                "dt": "t",
+                "q": clean_text
+            }
+            resp = _session.get(url, params=params, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data and isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                    translated_segments = [
+                        segment[0] for segment in data[0]
+                        if segment and isinstance(segment, list) and segment[0]
+                    ]
+                    result = "".join(translated_segments).strip()
+                    if result:
+                        _CACHE[cache_key] = result
+                        return result
+        except Exception as e:
+            logger.debug(f"Google translate (client={client_param}) attempt failed: {e}")
+
+    # Fallback: Google Mobile web scraping
     try:
         url = "https://translate.google.com/m"
-        params = {
-            "sl": source_lang,
-            "tl": target_lang,
-            "q": text.strip()
-        }
-        resp = _session.get(url, params=params, timeout=7)
+        params = {"sl": sl, "tl": tl, "q": clean_text}
+        resp = _session.get(url, params=params, timeout=5)
         if resp.status_code == 200:
             soup = bs4.BeautifulSoup(resp.text, "html.parser")
             res_elem = soup.find("div", {"class": "result-container"})
             if res_elem:
                 result = html.unescape(res_elem.get_text(strip=True))
-                if result:
+                if result and result != clean_text:
                     _CACHE[cache_key] = result
                     return result
     except Exception as e:
-        logger.warning(f"Translation request failed ({source_lang} -> {target_lang}): {e}")
+        logger.debug(f"Mobile web translation fallback failed: {e}")
 
-    # Fallback to original text on failure
+    # Fallback to original text if all attempts fail
+    logger.warning(f"All translation engines failed for ({source_lang} -> {target_lang}), using original text.")
     return text
 
 async def translate_text(text: str, source_lang: str, target_lang: str) -> str:

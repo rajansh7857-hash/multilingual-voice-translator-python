@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
@@ -98,7 +98,7 @@
             </div>
 
             <!-- Room info / Active Status -->
-            <div id="header-room-info" class="hidden flex items-center space-x-3">
+            <div id="header-room-info" class="hidden flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
                 <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700">
                     <span class="text-xs text-slate-400 font-mono">ROOM:</span>
                     <span id="display-room-id" class="text-sm font-bold text-indigo-400 font-mono">---</span>
@@ -107,13 +107,22 @@
                     </button>
                 </div>
 
-                <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700">
-                    <span id="user-language-badge" class="text-sm flex items-center gap-1.5 font-medium">
-                        <span>🌐</span> <span>English</span>
-                    </span>
+                <!-- Live Language Switcher -->
+                <div class="flex items-center bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-700 text-xs space-x-1.5">
+                    <span class="text-slate-400"><i class="fa-solid fa-microphone text-[10px] text-indigo-400 mr-0.5"></i>Speak:</span>
+                    <select id="header-speak-lang" class="bg-slate-900 text-white rounded px-1.5 py-0.5 border border-slate-700 outline-none text-xs cursor-pointer">
+                    </select>
+
+                    <button id="btn-swap-langs" title="Swap Speaking & Target Languages" class="px-1 py-0.5 text-indigo-400 hover:text-white transition">
+                        <i class="fa-solid fa-right-left text-[11px]"></i>
+                    </button>
+
+                    <span class="text-slate-400"><i class="fa-solid fa-language text-[10px] text-violet-400 mr-0.5"></i>To:</span>
+                    <select id="header-target-lang" class="bg-slate-900 text-white rounded px-1.5 py-0.5 border border-slate-700 outline-none text-xs cursor-pointer">
+                    </select>
                 </div>
 
-                <button id="btn-open-settings" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+                <button id="btn-open-settings" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Voice Settings">
                     <i class="fa-solid fa-gear"></i>
                 </button>
 
@@ -157,20 +166,33 @@
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Your Native / Preferred Language</label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500"><i class="fa-solid fa-earth-americas"></i></span>
-                            <select id="select-language" class="w-full pl-10 pr-4 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-white outline-none transition appearance-none cursor-pointer">
-                                <!-- Populated dynamically -->
-                            </select>
-                            <span class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-500"><i class="fa-solid fa-chevron-down text-xs"></i></span>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Speaking In</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500"><i class="fa-solid fa-microphone text-xs"></i></span>
+                                <select id="select-language" class="w-full pl-9 pr-6 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-xs text-white outline-none appearance-none cursor-pointer">
+                                    <!-- Populated dynamically -->
+                                </select>
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-500"><i class="fa-solid fa-chevron-down text-[10px]"></i></span>
+                            </div>
                         </div>
-                        <p class="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                            <i class="fa-solid fa-circle-info text-indigo-400"></i>
-                            You will speak &amp; hear in this language.
-                        </p>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Translate To</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500"><i class="fa-solid fa-language text-xs"></i></span>
+                                <select id="select-target-language" class="w-full pl-9 pr-6 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-xs text-white outline-none appearance-none cursor-pointer">
+                                    <!-- Populated dynamically -->
+                                </select>
+                                <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-500"><i class="fa-solid fa-chevron-down text-[10px]"></i></span>
+                            </div>
+                        </div>
                     </div>
+                    <p class="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                        <i class="fa-solid fa-circle-info text-indigo-400 text-[11px]"></i>
+                        Speak in your language; speech is translated &amp; spoken in real time.
+                    </p>
 
                     <div>
                         <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Room Code / Name</label>
@@ -287,6 +309,11 @@
                     <button id="btn-test-tts" class="bg-slate-800/80 hover:bg-slate-700/80 px-3 py-2 rounded-xl border border-slate-700 text-xs text-slate-300 transition font-medium flex items-center space-x-1">
                         <i class="fa-solid fa-circle-play text-violet-400"></i>
                         <span>Test Voice</span>
+                    </button>
+
+                    <button id="btn-simulate-partner" type="button" class="bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-500/30 text-indigo-300 hover:text-white px-3 py-2 rounded-xl text-xs transition font-medium flex items-center space-x-1.5" title="Simulate a remote conversational partner responding to you">
+                        <i class="fa-solid fa-robot text-indigo-400"></i>
+                        <span>Test Partner</span>
                     </button>
                 </div>
 

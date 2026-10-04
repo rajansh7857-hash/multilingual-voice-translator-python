@@ -1,4 +1,4 @@
-﻿// ==========================================================================
+// ==========================================================================
 // VoiceBridge - Real-Time Multilingual Group Voice Translator Client
 // ==========================================================================
 
@@ -6,7 +6,9 @@ const State = {
     user: {
         id: 'usr_' + Math.random().toString(36).substring(2, 9),
         name: '',
-        language: 'hi', // Default to Hindi or English
+        language: 'en', // Primary language
+        speakingLanguage: 'en',
+        targetLanguage: 'hi', // Default translation target
     },
     room: {
         id: '',
@@ -61,7 +63,9 @@ const DOM = {
     // Nav & Status
     headerRoomInfo: document.getElementById('header-room-info'),
     displayRoomId: document.getElementById('display-room-id'),
-    userLangBadge: document.getElementById('user-language-badge'),
+    headerSpeakLang: document.getElementById('header-speak-lang'),
+    headerTargetLang: document.getElementById('header-target-lang'),
+    btnSwapLangs: document.getElementById('btn-swap-langs'),
     btnCopyRoom: document.getElementById('btn-copy-room'),
     btnLeaveRoom: document.getElementById('btn-leave-room'),
     btnOpenSettings: document.getElementById('btn-open-settings'),
@@ -76,6 +80,7 @@ const DOM = {
     joinForm: document.getElementById('join-form'),
     inputName: document.getElementById('input-name'),
     selectLanguage: document.getElementById('select-language'),
+    selectTargetLanguage: document.getElementById('select-target-language'),
     inputRoom: document.getElementById('input-room'),
     btnGenerateRoom: document.getElementById('btn-generate-room'),
 
@@ -96,6 +101,7 @@ const DOM = {
     btnPTT: document.getElementById('btn-ptt'),
     toggleAutoTTS: document.getElementById('toggle-autotts'),
     btnTestTTS: document.getElementById('btn-test-tts'),
+    btnSimulatePartner: document.getElementById('btn-simulate-partner'),
     textChatForm: document.getElementById('text-chat-form'),
     inputChatText: document.getElementById('input-chat-text'),
 
@@ -146,8 +152,15 @@ async function loadSupportedLanguages() {
 }
 
 function populateLanguageSelects() {
-    DOM.selectLanguage.innerHTML = '';
-    DOM.modalSelectLanguage.innerHTML = '';
+    const selects = [
+        DOM.selectLanguage,
+        DOM.selectTargetLanguage,
+        DOM.headerSpeakLang,
+        DOM.headerTargetLang,
+        DOM.modalSelectLanguage
+    ].filter(Boolean);
+
+    selects.forEach(sel => sel.innerHTML = '');
 
     // Group languages by category: Indian Languages vs Global Languages
     const groups = {};
@@ -157,31 +170,27 @@ function populateLanguageSelects() {
         groups[cat].push(lang);
     });
 
-    for (const [categoryName, langs] of Object.entries(groups)) {
-        const optgroup1 = document.createElement('optgroup');
-        optgroup1.label = categoryName;
+    selects.forEach(selectElem => {
+        for (const [categoryName, langs] of Object.entries(groups)) {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = categoryName;
 
-        const optgroup2 = document.createElement('optgroup');
-        optgroup2.label = categoryName;
+            langs.forEach(lang => {
+                const opt = document.createElement('option');
+                opt.value = lang.code;
+                opt.textContent = `${lang.flag} ${lang.name}`;
+                optgroup.appendChild(opt);
+            });
 
-        langs.forEach(lang => {
-            const opt1 = document.createElement('option');
-            opt1.value = lang.code;
-            opt1.textContent = `${lang.flag} ${lang.name}`;
-            optgroup1.appendChild(opt1);
+            selectElem.appendChild(optgroup);
+        }
+    });
 
-            const opt2 = document.createElement('option');
-            opt2.value = lang.code;
-            opt2.textContent = `${lang.flag} ${lang.name}`;
-            optgroup2.appendChild(opt2);
-        });
-
-        DOM.selectLanguage.appendChild(optgroup1);
-        DOM.modalSelectLanguage.appendChild(optgroup2);
-    }
-
-    DOM.selectLanguage.value = 'hi';
-    DOM.modalSelectLanguage.value = 'hi';
+    if (DOM.selectLanguage) DOM.selectLanguage.value = 'en';
+    if (DOM.selectTargetLanguage) DOM.selectTargetLanguage.value = 'hi';
+    if (DOM.headerSpeakLang) DOM.headerSpeakLang.value = 'en';
+    if (DOM.headerTargetLang) DOM.headerTargetLang.value = 'hi';
+    if (DOM.modalSelectLanguage) DOM.modalSelectLanguage.value = 'en';
 }
 
 function loadAvailableVoices() {
@@ -267,8 +276,14 @@ function handleIncomingWSMessage(data) {
         case 'speech_message':
             appendSpeechMessage(data);
             SoundFX.messageIn();
-            if (State.autoTTS && !data.is_self) {
-                speakText(data.translated_text, State.user.language);
+            if (State.autoTTS) {
+                // If message from someone else, speak in my listening language
+                // If message from myself with translation, speak the translation
+                if (!data.is_self) {
+                    speakText(data.translated_text, data.recipient_lang || State.user.language);
+                } else if (data.translated_text && data.translated_text !== data.original_text) {
+                    speakText(data.translated_text, data.recipient_lang || State.user.targetLanguage);
+                }
             }
             break;
 
@@ -342,42 +357,61 @@ function highlightSpeakingUser(userId, userName, isSpeaking) {
 function appendSpeechMessage(msg) {
     const isMe = msg.is_self;
     const msgCard = document.createElement('div');
-    msgCard.className = `flex flex-col space-y-1 max-w-2xl ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} transition-all animate-fadeIn`;
+    msgCard.className = `flex flex-col space-y-1.5 max-w-2xl ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} transition-all animate-fadeIn`;
 
-    const langObj = State.languages.find(l => l.code === msg.sender_lang) || { flag: '🌐', name: msg.sender_lang };
+    const srcLangObj = State.languages.find(l => l.code === msg.sender_lang) || { flag: '🌐', name: msg.sender_lang };
+    const tgtLangObj = State.languages.find(l => l.code === msg.recipient_lang) || { flag: '🌐', name: msg.recipient_lang };
+
+    const hasTranslation = msg.translated_text && msg.translated_text.trim() !== msg.original_text.trim();
 
     msgCard.innerHTML = `
         <div class="flex items-center space-x-2 text-[11px] text-slate-400 px-1">
             <span class="font-bold text-slate-300">${escapeHtml(msg.sender_name)}</span>
             <span class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center gap-1">
-                <span>${langObj.flag}</span> <span>${langObj.name}</span>
+                <span>${srcLangObj.flag}</span> <span>${srcLangObj.name}</span>
             </span>
             <span>&bull; ${msg.timestamp}</span>
         </div>
 
         <div class="glass-card p-4 rounded-2xl border ${
-            isMe ? 'border-indigo-500/30 bg-indigo-950/30 text-right' : 'border-slate-800 bg-slate-900/60 text-left'
-        } shadow-lg space-y-2 max-w-full">
+            isMe ? 'border-indigo-500/40 bg-indigo-950/40 text-left' : 'border-slate-800 bg-slate-900/70 text-left'
+        } shadow-lg space-y-2.5 max-w-full">
             
-            <!-- Translated Text in Receiver's Language -->
-            <div class="flex items-start ${isMe ? 'flex-row-reverse' : 'flex-row'} justify-between gap-3">
-                <div class="text-sm md:text-base font-semibold text-white leading-relaxed">
-                    ${escapeHtml(msg.translated_text)}
+            ${hasTranslation ? `
+                <!-- Translated Result -->
+                <div class="flex items-start justify-between gap-3">
+                    <div class="space-y-1 flex-1">
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-indigo-400 flex items-center gap-1">
+                            <span>${tgtLangObj.flag}</span>
+                            <span>TRANSLATED (${tgtLangObj.name})</span>
+                        </div>
+                        <div class="text-sm md:text-base font-semibold text-white leading-relaxed">
+                            ${escapeHtml(msg.translated_text)}
+                        </div>
+                    </div>
+                    
+                    <button class="btn-speak-msg p-2 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 hover:text-white transition flex-shrink-0" title="Listen Audio">
+                        <i class="fa-solid fa-volume-high text-xs"></i>
+                    </button>
                 </div>
-                
-                <button class="btn-speak-msg p-1.5 rounded-lg bg-slate-800/80 hover:bg-indigo-600/40 text-slate-300 hover:text-white transition flex-shrink-0" title="Listen Audio">
-                    <i class="fa-solid fa-volume-high text-xs"></i>
-                </button>
-            </div>
 
-            <!-- Original Subtitle Transcript (if different from receiver lang) -->
-            ${msg.sender_lang !== msg.recipient_lang ? `
-                <div class="text-xs text-slate-400 pt-1 border-t border-slate-800/60 flex items-center ${isMe ? 'justify-end' : 'justify-start'} gap-1">
-                    <i class="fa-solid fa-quote-left text-[10px] text-slate-500"></i>
-                    <span class="italic">"${escapeHtml(msg.original_text)}"</span>
-                    <span class="text-[10px] text-slate-500">(${langObj.name})</span>
+                <!-- Original Transcript Subtitle -->
+                <div class="text-xs text-slate-400 pt-2 border-t border-slate-800/80 flex items-start gap-1.5">
+                    <i class="fa-solid fa-quote-left text-[10px] text-slate-500 mt-0.5"></i>
+                    <div class="italic text-slate-300">"${escapeHtml(msg.original_text)}"</div>
+                    <span class="text-[10px] text-slate-500 flex-shrink-0">(${srcLangObj.name})</span>
                 </div>
-            ` : ''}
+            ` : `
+                <!-- Untranslated or Single Language -->
+                <div class="flex items-start justify-between gap-3">
+                    <div class="text-sm md:text-base font-medium text-white leading-relaxed flex-1">
+                        ${escapeHtml(msg.original_text)}
+                    </div>
+                    <button class="btn-speak-msg p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition flex-shrink-0" title="Listen Audio">
+                        <i class="fa-solid fa-volume-high text-xs"></i>
+                    </button>
+                </div>
+            `}
         </div>
     `;
 
@@ -385,7 +419,9 @@ function appendSpeechMessage(msg) {
     const speakBtn = msgCard.querySelector('.btn-speak-msg');
     if (speakBtn) {
         speakBtn.addEventListener('click', () => {
-            speakText(msg.translated_text, State.user.language);
+            const textToSpeak = hasTranslation ? msg.translated_text : msg.original_text;
+            const langToSpeak = hasTranslation ? msg.recipient_lang : msg.sender_lang;
+            speakText(textToSpeak, langToSpeak);
         });
     }
 
@@ -413,9 +449,9 @@ function initSpeechRecognition() {
         return false;
     }
 
-    const currentLangMeta = State.languages.find(l => l.code === State.user.language);
-    // Primary locale or fallback
-    const recognitionLocale = currentLangMeta ? (currentLangMeta.locale || currentLangMeta.tts_fallback || 'hi-IN') : 'hi-IN';
+    const speakLang = State.user.speakingLanguage || State.user.language || 'en';
+    const currentLangMeta = State.languages.find(l => l.code === speakLang);
+    const recognitionLocale = currentLangMeta ? (currentLangMeta.locale || currentLangMeta.tts_fallback || 'en-US') : 'en-US';
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -461,10 +497,9 @@ function initSpeechRecognition() {
             alert('Microphone access was denied. Please allow microphone permissions in your browser.');
             stopListening();
         } else if (event.error === 'language-not-supported') {
-            // If the browser does not support the specific regional subtag, fallback to standard Hindi/English
-            console.log('Language locale not supported by browser STT, falling back to general locale');
-            if (recognition.lang !== 'hi-IN' && recognition.lang !== 'en-US') {
-                recognition.lang = 'hi-IN';
+            console.log('Language locale not supported by browser STT, falling back to English');
+            if (recognition.lang !== 'en-US') {
+                recognition.lang = 'en-US';
                 try { recognition.start(); } catch(e){}
             }
         }
@@ -472,11 +507,15 @@ function initSpeechRecognition() {
 
     recognition.onend = () => {
         if (State.isListening && !State.isPTTActive) {
-            try {
-                recognition.start();
-            } catch (e) {
-                // Ignore restart error
-            }
+            setTimeout(() => {
+                if (State.isListening && !State.isPTTActive) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        // Safe restart
+                    }
+                }
+            }, 250);
         } else if (!State.isPTTActive) {
             updateMicUI(false);
             broadcastSpeakingState(false);
@@ -585,7 +624,8 @@ function sendSpeechMessage(text) {
     State.ws.send(JSON.stringify({
         type: 'speech',
         text: text,
-        source_lang: State.user.language
+        source_lang: State.user.speakingLanguage || State.user.language || 'en',
+        target_lang: State.user.targetLanguage || 'hi'
     }));
 }
 
@@ -611,16 +651,67 @@ function setupEventListeners() {
         e.preventDefault();
         const name = DOM.inputName.value.trim();
         const room = DOM.inputRoom.value.trim().toLowerCase();
-        const lang = DOM.selectLanguage.value;
+        const speakLang = DOM.selectLanguage.value || 'en';
+        const targetLang = DOM.selectTargetLanguage ? DOM.selectTargetLanguage.value : 'hi';
 
         if (!name || !room) return;
 
         State.user.name = name;
         State.room.id = room;
-        State.user.language = lang;
+        State.user.speakingLanguage = speakLang;
+        State.user.language = speakLang;
+        State.user.targetLanguage = targetLang;
 
         enterRoom();
     });
+
+    // Header Language Selectors & Swap
+    if (DOM.headerSpeakLang) {
+        DOM.headerSpeakLang.addEventListener('change', () => {
+            State.user.speakingLanguage = DOM.headerSpeakLang.value;
+            State.user.language = State.user.speakingLanguage;
+            if (State.isListening) {
+                stopListening();
+                initSpeechRecognition();
+                startListening();
+            } else {
+                initSpeechRecognition();
+            }
+            if (State.ws && State.ws.readyState === WebSocket.OPEN) {
+                State.ws.send(JSON.stringify({
+                    type: 'update_profile',
+                    language: State.user.speakingLanguage,
+                    name: State.user.name
+                }));
+            }
+        });
+    }
+
+    if (DOM.headerTargetLang) {
+        DOM.headerTargetLang.addEventListener('change', () => {
+            State.user.targetLanguage = DOM.headerTargetLang.value;
+        });
+    }
+
+    if (DOM.btnSwapLangs) {
+        DOM.btnSwapLangs.addEventListener('click', () => {
+            const temp = State.user.speakingLanguage;
+            State.user.speakingLanguage = State.user.targetLanguage;
+            State.user.targetLanguage = temp;
+            State.user.language = State.user.speakingLanguage;
+
+            if (DOM.headerSpeakLang) DOM.headerSpeakLang.value = State.user.speakingLanguage;
+            if (DOM.headerTargetLang) DOM.headerTargetLang.value = State.user.targetLanguage;
+
+            if (State.isListening) {
+                stopListening();
+                initSpeechRecognition();
+                startListening();
+            } else {
+                initSpeechRecognition();
+            }
+        });
+    }
 
     // Mic Toggle Button
     DOM.btnToggleMic.addEventListener('click', () => {
@@ -649,7 +740,8 @@ function setupEventListeners() {
 
     // Test TTS Button
     DOM.btnTestTTS.addEventListener('click', () => {
-        const langMeta = State.languages.find(l => l.code === State.user.language);
+        const langCode = State.user.targetLanguage || State.user.speakingLanguage || 'en';
+        const langMeta = State.languages.find(l => l.code === langCode);
         const samplePhrases = {
             'hi': 'नमस्ते! ध्वनि अनुवाद सक्रिय और तैयार है।',
             'bn': 'নমস্কার! ভয়েস অনুবাদ সক্রিয় এবং প্রস্তুত।',
@@ -670,9 +762,37 @@ function setupEventListeners() {
             'de': 'Hallo! Die Sprachübersetzung ist aktiv und bereit.',
             'ja': 'こんにちは！音声翻訳が準備完了しました。'
         };
-        const phrase = samplePhrases[State.user.language] || `Welcome! Translation ready for ${langMeta ? langMeta.name : State.user.language}.`;
-        speakText(phrase, State.user.language);
+        const phrase = samplePhrases[langCode] || `Welcome! Translation ready for ${langMeta ? langMeta.name : langCode}.`;
+        speakText(phrase, langCode);
     });
+
+    // Simulate Partner Button
+    if (DOM.btnSimulatePartner) {
+        DOM.btnSimulatePartner.addEventListener('click', () => {
+            const partnerLang = State.user.targetLanguage || 'es';
+            const myLang = State.user.speakingLanguage || 'en';
+            const partnerMeta = State.languages.find(l => l.code === partnerLang) || { name: partnerLang, flag: '🌐' };
+
+            const partnerPhrases = {
+                'es': '¡Hola! Te escucho perfectamente y la traducción en tiempo real funciona excelente.',
+                'hi': 'नमस्ते! मैं आपको स्पष्ट रूप से सुन सकता हूँ और वास्तविक समय का अनुवाद बहुत अच्छा काम कर रहा है।',
+                'fr': 'Bonjour! Je vous entends parfaitement et la traduction en direct fonctionne à merveille.',
+                'de': 'Hallo! Ich kann Sie perfekt hören und die Echtzeitübersetzung funktioniert hervorragend.',
+                'ja': 'こんにちは！はっきりと聞こえます。リアルタイム翻訳は素晴らしく機能しています。',
+                'en': 'Hello! I can hear you clearly and the real-time translation is working great.'
+            };
+            const partnerText = partnerPhrases[partnerLang] || `Hello from ${partnerMeta.name}! Real-time translation is working.`;
+
+            if (State.ws && State.ws.readyState === WebSocket.OPEN) {
+                State.ws.send(JSON.stringify({
+                    type: 'speech',
+                    text: partnerText,
+                    source_lang: partnerLang,
+                    target_lang: myLang
+                }));
+            }
+        });
+    }
 
     // Text Fallback Chat Form
     DOM.textChatForm.addEventListener('submit', (e) => {
@@ -701,7 +821,7 @@ function setupEventListeners() {
 
     // Settings Modal
     DOM.btnOpenSettings.addEventListener('click', () => {
-        DOM.modalSelectLanguage.value = State.user.language;
+        DOM.modalSelectLanguage.value = State.user.speakingLanguage || State.user.language;
         DOM.settingsModal.classList.remove('hidden');
     });
 
@@ -724,9 +844,10 @@ function setupEventListeners() {
         const newVoice = DOM.selectVoice.value;
         State.selectedVoiceURI = newVoice;
 
-        if (newLang !== State.user.language) {
+        if (newLang !== State.user.speakingLanguage) {
+            State.user.speakingLanguage = newLang;
             State.user.language = newLang;
-            updateHeaderLanguageBadge();
+            if (DOM.headerSpeakLang) DOM.headerSpeakLang.value = newLang;
             if (State.isListening) {
                 stopListening();
                 initSpeechRecognition();
@@ -755,7 +876,9 @@ function enterRoom() {
     DOM.displayRoomId.textContent = State.room.id;
     window.location.hash = State.room.id;
 
-    updateHeaderLanguageBadge();
+    if (DOM.headerSpeakLang) DOM.headerSpeakLang.value = State.user.speakingLanguage || 'en';
+    if (DOM.headerTargetLang) DOM.headerTargetLang.value = State.user.targetLanguage || 'hi';
+
     connectWebSocket();
     initSpeechRecognition();
 }
@@ -772,8 +895,8 @@ function leaveRoom() {
 }
 
 function updateHeaderLanguageBadge() {
-    const langObj = State.languages.find(l => l.code === State.user.language) || { flag: '🌐', name: State.user.language };
-    DOM.userLangBadge.innerHTML = `<span>${langObj.flag}</span> <span>${escapeHtml(langObj.name)}</span>`;
+    if (DOM.headerSpeakLang) DOM.headerSpeakLang.value = State.user.speakingLanguage || 'en';
+    if (DOM.headerTargetLang) DOM.headerTargetLang.value = State.user.targetLanguage || 'hi';
 }
 
 function escapeHtml(text) {

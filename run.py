@@ -1,7 +1,14 @@
-﻿import uvicorn
+import sys
+import uvicorn
 import webbrowser
 import threading
 import time
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 def open_browser():
     time.sleep(1.5)

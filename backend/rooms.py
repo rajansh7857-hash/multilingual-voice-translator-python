@@ -1,4 +1,4 @@
-﻿import json
+import json
 import time
 import uuid
 import logging
@@ -99,7 +99,14 @@ class RoomManager:
             if not room.participants:
                 self.rooms.pop(room_id, None)
 
-    async def handle_speech_broadcast(self, room_id: str, sender_id: str, original_text: str, source_lang: str):
+    async def handle_speech_broadcast(
+        self,
+        room_id: str,
+        sender_id: str,
+        original_text: str,
+        source_lang: str,
+        target_lang: Optional[str] = None
+    ):
         room = self.get_room(room_id)
         if not room or sender_id not in room.participants:
             return
@@ -112,6 +119,8 @@ class RoomManager:
         # 1. Determine all unique target languages in the room
         target_languages = room.get_target_languages()
         target_languages.add(source_lang)  # Ensure sender's language is present
+        if target_lang:
+            target_languages.add(target_lang)
 
         # 2. Perform concurrent translation for each unique language
         translations = await translate_for_multiple_languages(clean_text, source_lang, target_languages)
@@ -122,7 +131,14 @@ class RoomManager:
         dead_connections = []
         # 3. Deliver customized translated message to each participant
         for user_id, participant in room.participants.items():
-            user_target_lang = participant.language
+            is_self = (user_id == sender_id)
+            
+            # For the sender, if a target_lang was specified, use that translation so the sender sees the translation!
+            if is_self and target_lang and target_lang != source_lang:
+                user_target_lang = target_lang
+            else:
+                user_target_lang = participant.language
+
             translated_text = translations.get(user_target_lang, clean_text)
             
             payload = {
@@ -135,7 +151,8 @@ class RoomManager:
                 "original_text": clean_text,
                 "translated_text": translated_text,
                 "recipient_lang": user_target_lang,
-                "is_self": (user_id == sender_id),
+                "translations": translations,
+                "is_self": is_self,
                 "timestamp": timestamp
             }
             try:
